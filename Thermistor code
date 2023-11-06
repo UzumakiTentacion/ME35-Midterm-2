@@ -1,0 +1,95 @@
+##THERMISTOR CODE##
+
+import machine
+import math
+import urequests
+import uasyncio as asyncio
+from mqtt import MQTTClient
+
+# Define your Adafruit IO feed key
+AIO_KEY = 'aio_hIHl11DNF086NcvwJTb3dyPyiM44'
+
+# Connect the thermistor to an analog pin (e.g., GP27)
+thermistor_pin = machine.ADC(27)  # Change to the appropriate pin number
+
+# Connect LEDs to GPIO pins
+led_pins = [10, 11, 12, 13]  # Adjust the pins accordingly
+
+# Known reference values for the thermistor at a reference temperature (T0) and its resistance (R0)
+# Update these values according to your thermistor's characteristics
+R0 = 10000
+T0 = 294
+beta = 3950
+R_series = 10000
+
+# Function to convert temperature from ADC value to Celsius
+def convert_to_celsius(temperature_value):
+    Vr = 3.3 * float(temperature_value) / 65535
+    Rt = 10000 * Vr / (3.3 - Vr)
+    temp = 1 / (((math.log(Rt / 10000)) / 3950) + (1 / (273.15 + 25)))
+    return temp - 273.15
+
+# Function to control LEDs based on temperature
+def control_leds(temp):
+    for i, pin in enumerate(led_pins):
+        machine.Pin(pin, machine.Pin.OUT).off()  # Turn off all LEDs
+
+    if temp < 5:
+        machine.Pin(led_pins[3], machine.Pin.OUT).on()  # Blue (Winter) LED on
+    elif 5 <= temp < 15:
+        machine.Pin(led_pins[2], machine.Pin.OUT).on()  # Orange (Autumn) LED on
+    elif 15 <= temp < 26:
+        machine.Pin(led_pins[1], machine.Pin.OUT).on()  # Green (Spring) LED on
+    else:
+        machine.Pin(led_pins[0], machine.Pin.OUT).on()  # Red (Summer) LED on
+
+# Function to convert temperature from Celsius to Fahrenheit
+def celsius_to_fahrenheit(celsius_temp):
+    return (celsius_temp * 9/5) + 32
+
+# Function to send temperature data (both Celsius and Fahrenheit) to Adafruit IO
+def send_to_adafruit_io(topic, message):
+    mqtt_client.publish(topic, message)
+mqtt_host = "io.adafruit.com"
+mqtt_username = "UzumakiTentacion"  # Adafruit IO username
+mqtt_password = "aio_hIHl11DNF086NcvwJTb3dyPyiM44"  # Adafruit IO Key
+mqtt_publish_topic1 = "UzumakiTentacion/feeds/celsius"  # The MQTT topic for Adafruit IO Feed
+mqtt_publish_topic2 = "UzumakiTentacion/feeds/fahrenhiet"
+mqtt_publish_color = "UzumakiTentacion/feeds/color"
+# Enter a random ID for this MQTT Client
+# It needs to be globally unique across all of Adafruit IO.
+mqtt_client_id = "Makaveli"
+# Initialize our MQTTClient and connect to the MQTT server
+mqtt_client = MQTTClient(
+        client_id=mqtt_client_id,
+        server=mqtt_host,
+        user=mqtt_username,
+        password=mqtt_password)
+mqtt_client.connect()
+async def read_temperature():
+    while True:
+        temperature_value = thermistor_pin.read_u16()
+        print("Raw temperature:", temperature_value)
+        temperature_Cel = convert_to_celsius(temperature_value)
+        temperature_Fah = celsius_to_fahrenheit(temperature_Cel)
+
+        print('Celsius: {:.2f} C Fahrenheit: {:.2f} F'.format(temperature_Cel, temperature_Fah))
+
+        control_leds(temperature_Cel)  # Control LEDs based on temperature
+
+        send_to_adafruit_io(mqtt_publish_topic1, str(temperature_Cel))  # Send Celsius data to Adafruit IO
+        send_to_adafruit_io(mqtt_publish_topic2, str(temperature_Fah))  # Send Fahrenheit data to Adafruit IO
+
+        await asyncio.sleep(5) 
+try:
+    loop = asyncio.get_event_loop()
+    loop.create_task(read_temperature())
+    loop.run_forever()
+except KeyboardInterrupt:
+    print("Program stopped by the user")
+finally:
+    # Turn off all LEDs when the program ends
+    for pin in led_pins:
+        machine.Pin(pin, machine.Pin.OUT).off()
+
+
