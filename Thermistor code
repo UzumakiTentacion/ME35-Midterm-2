@@ -1,13 +1,17 @@
 ##THERMISTOR CODE##
 
+import uasyncio as asyncio
 import machine
 import math
-import urequests
-import uasyncio as asyncio
 from mqtt import MQTTClient
+import MT2secret  # Import the MT2secret module
 
 # Define your Adafruit IO feed key
-AIO_KEY = 'aio_hIHl11DNF086NcvwJTb3dyPyiM44'
+AIO_USERNAME = MT2secret.AIO_USERNAME
+AIO_KEY = MT2secret.AIO_KEY
+ADAFRUIT_IO_MQTT_BROKER = MT2secret.ADAFRUIT_IO_MQTT_BROKER
+ADAFRUIT_IO_MQTT_PORT = MT2secret.ADAFRUIT_IO_MQTT_PORT
+MQTT_TOPIC = MT2secret.MQTT_TOPIC
 
 # Connect the thermistor to an analog pin (e.g., GP27)
 thermistor_pin = machine.ADC(27)  # Change to the appropriate pin number
@@ -50,38 +54,60 @@ def celsius_to_fahrenheit(celsius_temp):
 # Function to send temperature data (both Celsius and Fahrenheit) to Adafruit IO
 def send_to_adafruit_io(topic, message):
     mqtt_client.publish(topic, message)
-mqtt_host = "io.adafruit.com"
-mqtt_username = "UzumakiTentacion"  # Adafruit IO username
-mqtt_password = "aio_hIHl11DNF086NcvwJTb3dyPyiM44"  # Adafruit IO Key
-mqtt_publish_topic1 = "UzumakiTentacion/feeds/celsius"  # The MQTT topic for Adafruit IO Feed
-mqtt_publish_topic2 = "UzumakiTentacion/feeds/fahrenhiet"
-mqtt_publish_color = "UzumakiTentacion/feeds/color"
-# Enter a random ID for this MQTT Client
-# It needs to be globally unique across all of Adafruit IO.
-mqtt_client_id = "Makaveli"
-# Initialize our MQTTClient and connect to the MQTT server
+
+# Create an MQTT client
 mqtt_client = MQTTClient(
-        client_id=mqtt_client_id,
-        server=mqtt_host,
-        user=mqtt_username,
-        password=mqtt_password)
-mqtt_client.connect()
+    client_id="Makaveli",
+    server=MT2secret.ADAFRUIT_IO_MQTT_BROKER,
+    port=MT2secret.ADAFRUIT_IO_MQTT_PORT,
+    user=MT2secret.AIO_USERNAME,
+    password=MT2secret.AIO_KEY
+)
+
 async def read_temperature():
-    while True:
-        temperature_value = thermistor_pin.read_u16()
-        print("Raw temperature:", temperature_value)
-        temperature_Cel = convert_to_celsius(temperature_value)
-        temperature_Fah = celsius_to_fahrenheit(temperature_Cel)
+    try:
+        while True:
+            try:
+                temperature_value = thermistor_pin.read_u16()
+                print("Raw temperature:", temperature_value)
+                temperature_Cel = convert_to_celsius(temperature_value)
+                temperature_Fah = celsius_to_fahrenheit(temperature_Cel)
 
-        print('Celsius: {:.2f} C Fahrenheit: {:.2f} F'.format(temperature_Cel, temperature_Fah))
+                print('Celsius: {:.2f} C Fahrenheit: {:.2f} F'.format(temperature_Cel, temperature_Fah))
 
-        control_leds(temperature_Cel)  # Control LEDs based on temperature
+                control_leds(temperature_Cel)  # Control LEDs based on temperature
 
-        send_to_adafruit_io(mqtt_publish_topic1, str(temperature_Cel))  # Send Celsius data to Adafruit IO
-        send_to_adafruit_io(mqtt_publish_topic2, str(temperature_Fah))  # Send Fahrenheit data to Adafruit IO
+                # Connect to the Adafruit IO MQTT broker
+                mqtt_client.connect()
+                print("Connected to Adafruit IO MQTT")
 
-        await asyncio.sleep(5) 
+                color_seen = "Red"  # Define color_seen appropriately
+
+                if color_seen == "Red":
+                    # Publish the temperature reading in Celsius to the Adafruit IO feed
+                     mqtt_client.publish(MT2secret.MQTT_TOPIC, str(temperature_Cel))
+                     print(f"Published Celsius temperature: {temperature_Cel}°C")
+                else:
+                    # Publish the temperature reading in Fahrenheit (default) to the Adafruit IO feed
+                     mqtt_client.publish(MT2secret.MQTT_TOPIC, str(temperature_Fah))
+                     print(f"Published Fahrenheit temperature: {temperature_Fah}°F")
+
+                # Disconnect from the Adafruit IO MQTT broker
+                mqtt_client.disconnect()
+
+            except Exception as e:
+                print(f"Error in read_temperature: {e}")
+
+            await asyncio.sleep(5)  # 5 sec sleep
+
+    except Exception as e:
+        print(f"Error in read_temperature main loop: {e}")
+
+           
 try:
+    print("Connecting to Adafruit IO MQTT broker...")
+    mqtt_client.connect()
+    print("Connected to Adafruit IO MQTT")
     loop = asyncio.get_event_loop()
     loop.create_task(read_temperature())
     loop.run_forever()
@@ -91,5 +117,3 @@ finally:
     # Turn off all LEDs when the program ends
     for pin in led_pins:
         machine.Pin(pin, machine.Pin.OUT).off()
-
-
