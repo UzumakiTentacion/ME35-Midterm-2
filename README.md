@@ -1,6 +1,7 @@
 # ME35-Midterm-2
-My ME35 Midterm 2 crazy thermostat code
-Reads the temperature from the termistor, sends to airtable and an adafruit dashboard
+My ME35 Midterm 2 crazy thermostat code: 
+
+It reads the temperature from the termistor, sends to airtable and an adafruit dashboard
 
 Goal:
 
